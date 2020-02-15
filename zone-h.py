@@ -108,6 +108,9 @@ class ZoneH(object):
                   '/'.join('='.join(map(str, i)) for i in kwargs.items())
             logging.info("scrape %r", url)
             response = self.make_request(url).text
+
+            if re.search(r"(?si)total.+?<b>0</b>", response):
+                return None
             for item in re.findall(r"(?si)\/archive\/notifier\=(?P<notifier>[^/\"]+).*?<td>(?P<url>\w+\.[\w.]+)[/.]", response):
                 notifier, url = map(html.unescape, item)
                 yield notifier, url
@@ -123,7 +126,7 @@ class ZoneH(object):
         while page <= (pagenum or 999999):
             kwargs.update({"page": page})
             arc = self.archive(fatal=fatal, **kwargs)
-            if not arc:
+            if not list(arc):
                 break
             for i in arc:
                 yield i
