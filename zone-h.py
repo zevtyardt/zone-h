@@ -198,7 +198,7 @@ def write_f():
     if reverse_ip.urls:
         logging.info("removing duplicate")
         sorted_url = OrderedDict().fromkeys(reverse_ip.urls)
-        logging.info("write %s urls at %s", len(sorted_url), args.output)
+        logging.info("write %s urls to %s", len(sorted_url), args.output)
         with open(args.output, "a") as f:
             f.write("\n".join(sorted_url) + "\n")
 
