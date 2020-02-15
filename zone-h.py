@@ -14,7 +14,8 @@ zonehome = 'http://www.zone-h.org/'
 logging.basicConfig(format="%(threadName)s: %(message)s..", level=logging.INFO)
 thread_lokal = threading.local()
 q = queue.Queue()
-list_url = []
+urls = []
+
 run = True
 
 class CaptchaError(Exception):
@@ -84,18 +85,19 @@ class ZoneH(object):
         self.register()
         success = False
         html_response = ""
+        tried = 0
         while not success:
             with getattr(self.sess, method)(*args, **kwargs) as resp:
                 html_response = resp.text
                 if "src=\"/captcha.py\"" in html_response or 'name="captcha"' in html_response:
                     raise CaptchaError(
                         "CaptchaError: please complete Captcha in the browser. url %s" % resp.url)
-                elif "slowAES.decrypt(c,2,a,b))" in html_response:
+                elif "slowAES.decrypt(c,2,a,b))" in html_response and tried < 2:
                     cookie = bypassTestCookie(html_response)
-                    # self.sess.cookies.clear()
                     self.sess.cookies.update(cookie)
                     logging.info("current cookies: %s",
                                  self.sess.cookies.get_dict())
+                    tried += 1
                 elif "/logout" not in html_response:
                     raise CaptchaError("SessionError: PHPSESSID is no longer valid")
                 else:
@@ -111,8 +113,12 @@ class ZoneH(object):
 
             if re.search(r"(?si)total.+?<b>0</b>", response):
                 return None
-            for item in re.findall(r"(?si)\/archive\/notifier\=(?P<notifier>[^/\"]+).*?<td>(?P<url>\w+\.[\w.]+)[/.]", response):
+            items = re.findall(r"(?si)\/archive\/notifier\=(?P<notifier>[^/\"]+).*?<td>(?P<url>\w+\.[\w.]+)[/.]", response)
+            if kwargs.get("page"):
+                logging.info("page %s got %s urls", kwargs["page"], len(items))
+            for item in items:
                 notifier, url = map(html.unescape, item)
+                urls.append(url)
                 yield notifier, url
         except Exception as e:
             if fatal:
@@ -123,28 +129,26 @@ class ZoneH(object):
         if notifier:
             kwargs.update({"notifier": notifier})
         page = 1
-        while page <= (pagenum or 999999):
+        while page < (pagenum or 999999) + 1:
             kwargs.update({"page": page})
-            arc = self.archive(fatal=fatal, **kwargs)
-            if not list(arc):
+            arc = list(self.archive(fatal=fatal, **kwargs))
+            if not arc:
+                logging.info("no url found!")
                 break
-            for i in arc:
+            for n, i in arc:
                 yield i
             page += 1
-        logging.info("target reached")
+
 
 
 class reverse_ip:
-    urls = []
-
     @classmethod
     def run_all(self, url):
         for func in dir(self):
             if func.endswith("_lookup"):
-                self.urls.append(url)
                 tmp_urls, err = getattr(self, func)(url)
                 if tmp_urls:
-                    self.urls.extend(tmp_urls)
+                    urls.extend(tmp_urls)
                     msg = "%s got %s urls" % (url, len(tmp_urls))
                     logging.info("%s: queue %s: %s", func[:-7], q.qsize(), msg)
                 else:
@@ -198,9 +202,9 @@ class reverse_ip:
 
 
 def write_f():
-    if reverse_ip.urls:
+    if urls:
         logging.info("removing duplicate")
-        sorted_url = OrderedDict().fromkeys(reverse_ip.urls)
+        sorted_url = OrderedDict().fromkeys(urls)
         logging.info("write %s urls to %s", len(sorted_url), args.output)
         with open(args.output, "a") as f:
             f.write("\n".join(sorted_url) + "\n")
@@ -254,7 +258,7 @@ if __name__ == '__main__':
 
     try:
         for notify in args.notifier:
-            for n, url in zone.all_archive(notifier=notify, pagenum=args.page):
+            for url in zone.all_archive(notifier=notify, pagenum=args.page):
                 q.put(url)
     except Exception as e:
         run = False
