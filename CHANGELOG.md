@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - add domains.txt ([73f71cd](https://github.com/zevtyardt/zone-h/commit/73f71cd028fcb73298c9989950a86295f08b1da9)).
 - added new features, see README.md ([8d94d3c](https://github.com/zevtyardt/zone-h/commit/8d94d3cb7454730061434b68f6f09aa123b29032)).
 - proxy support ([b2518e4](https://github.com/zevtyardt/zone-h/commit/b2518e4ad18bbd75bdb5de744d2867d9337eb3ef)).
+- added proxy list support ([6cdf6de](https://github.com/zevtyardt/zone-h/commit/6cdf6de5235598b41e219a216c488920e697ac14)).
 
 ### Changed
 - change permission: +x to -x ([5123690](https://github.com/zevtyardt/zone-h/commit/512369065da688eb7c020677969d6339f3ad445f)).
