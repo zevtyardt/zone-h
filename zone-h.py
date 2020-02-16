@@ -62,6 +62,11 @@ def get_request():
                                      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_0) AppleWebKit/535.11 (KHTML, like Gecko) Chrome/17.0.963.65 Safari/535.11',
                                      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_4) AppleWebKit/535.11 (KHTML, like Gecko) Chrome/17.0.963.65 Safari/535.11'))
     })
+    if args.proxy:
+        thread_lokal.sess.proxies.update({
+            "http": "http://" + args.proxy,
+            "https": "https://" + args.proxy
+        })
     return thread_lokal.sess
 
 
@@ -219,14 +224,15 @@ def write_f():
 
 
 def thread_worker(func):
-    while run:
-        item = q.get()
-        func(item)
-        q.task_done()
+    with threading.Lock():
+        while run:
+            item = q.get()
+            func(item)
+            q.task_done()
 
 
 def sigint_handler(signum, frame):
-    logging.info('Shutting down')
+    logging.info('shutting down')
     run = False
     write_f()
     sys.exit(0)
@@ -252,6 +258,7 @@ if __name__ == '__main__':
     pg.add_argument("-p", "--page", metavar="NUM", type=int, help="Page archive, 1 - NUM")
     pg.add_argument("-a", "--all-archive", action="store_true", help="Scrape all pages, 1 ~")
     parser.add_argument("-t", "--threadnum", metavar="NUM", type=int, default=10, help="Thread num (default %(default)s)")
+    parser.add_argument("-x", "--proxy", metavar="IP:PORT", help="Use the specified HTTP/HTTPS/SOCKS proxy.")
     parser.add_argument("-o", "--output", metavar="FILE", default="domains.txt", help="Output file")
     parser.add_argument("-v", "--verbose", action="store_true", help="verbose mode")
 
