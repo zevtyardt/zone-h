@@ -11,15 +11,17 @@ import sys
 from collections import OrderedDict
 
 zonehome = 'http://www.zone-h.org/'
-logging.basicConfig(format="%(threadName)s: %(message)s..", level=logging.INFO)
+logging.basicConfig(format="%(threadName)s: %(message)s", level=logging.INFO)
 thread_lokal = threading.local()
 q = queue.Queue()
 urls = []
 
 run = True
 
+
 class CaptchaError(Exception):
     pass
+
 
 def get_request():
     thread_lokal.sess = requests.Session()
@@ -99,7 +101,8 @@ class ZoneH(object):
                                  self.sess.cookies.get_dict())
                     tried += 1
                 elif "/logout" not in html_response:
-                    raise CaptchaError("SessionError: PHPSESSID is no longer valid")
+                    raise CaptchaError(
+                        "SessionError: PHPSESSID is no longer valid")
                 else:
                     success = True
         return resp
@@ -107,13 +110,15 @@ class ZoneH(object):
     def archive(self, fatal=True, **kwargs):
         try:
             url = zonehome + "archive/" + \
-                  '/'.join('='.join(map(str, i)) for i in kwargs.items())
+                '/'.join('='.join(map(str, i))
+                         for i in kwargs.items() if i[1] is not None)
             logging.info("scrape %r", url)
             response = self.make_request(url).text
 
             if re.search(r"(?si)total.+?<b>0</b>", response):
                 return None
-            items = re.findall(r"(?si)\/archive\/notifier\=(?P<notifier>[^/\"]+).*?<td>(?P<url>\w+\.[\w.]+)[/.]", response)
+            items = re.findall(
+                r"(?si)\/archive\/notifier\=(?P<notifier>[^/\"]+).*?<td>\s*(?P<url>\w+\.[\w.]+)\s*</td>", response)
             if kwargs.get("page"):
                 logging.info("page %s got %s urls", kwargs["page"], len(items))
             for item in items:
@@ -140,7 +145,6 @@ class ZoneH(object):
             page += 1
 
 
-
 class reverse_ip:
     @classmethod
     def run_all(self, url):
@@ -153,7 +157,8 @@ class reverse_ip:
                     logging.info("%s: queue %s: %s", func[:-7], q.qsize(), msg)
                 else:
                     msg = 'failed: %s' % err
-                    logging.debug("%s: queue %s: %s", func[:-7], q.qsize(), msg)
+                    logging.debug("%s: queue %s: %s",
+                                  func[:-7], q.qsize(), msg)
 
     @classmethod
     def hackertarget_lookup(self, url):
@@ -184,7 +189,8 @@ class reverse_ip:
                 with get_request().get("https://www.bing.com/search?q=ip:%s&page=%s" % (host, page)) as resp:
                     content = resp.text
                     if len(content) > 0:
-                        urls.extend(re.findall(r"<cite>https?://([\w\d.]+\.\w+)</cite>", content))
+                        urls.extend(re.findall(
+                            r"<cite>https?://([\w\d.]+\.\w+)</cite>", content))
                         page += 1
                     else:
                         break
@@ -216,6 +222,7 @@ def thread_worker(func):
         func(item)
         q.task_done()
 
+
 def sigint_handler(signum, frame):
     logging.info('Shutting down')
     run = False
@@ -228,22 +235,25 @@ signal.signal(signal.SIGINT, sigint_handler)
 if __name__ == '__main__':
     import argparse
 
+    logging.info("\n\n\t@author     Val\n\t@facebook   https://fb.com/zvtyrdt.id\n\n")
+
     parser = argparse.ArgumentParser(
-        formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=70)
+        formatter_class=lambda prog: argparse.HelpFormatter(
+            prog, max_help_position=70)
     )
 
-    parser.add_argument("notifier", nargs="+", help="*notifier name")
-    parser.add_argument("-c", "--phpsessid", metavar="VALUE",  help="valid Cookies[phpsessid]", required=True)
+    parser.add_argument("notifier", nargs="*", help="*notifier name, default random", default=[None])
+    parser.add_argument("-c", "--phpsessid", metavar="VALUE", help="valid Cookies[PHPSESSID]", required=True)
+    parser.add_argument("-s", "--special", action="store_true", help="Special defacements only")
+    parser.add_argument("-u", "--unpublished", action="store_true", help="Onhold (Unpublished) only")
     pg = parser.add_mutually_exclusive_group(required=True)
     pg.add_argument("-p", "--page", metavar="NUM", type=int, help="Page archive, 1 - NUM")
-    pg.add_argument("-a", "--all-archive", action="store_true", help="Scrape all archive, 1 ~")
+    pg.add_argument("-a", "--all-archive", action="store_true", help="Scrape all pages, 1 ~")
     parser.add_argument("-t", "--threadnum", metavar="NUM", type=int, default=10, help="Thread num (default %(default)s)")
     parser.add_argument("-o", "--output", metavar="FILE", default="domains.txt", help="Output file")
     parser.add_argument("-v", "--verbose", action="store_true", help="verbose mode")
 
     args = parser.parse_args()
-
-    logging.info("\n\n\t@author     Val\n\t@facebook   https://fb.com/zvtyrdt.id\n\n")
 
     cookies = {"PHPSESSID": args.phpsessid}
     if args.verbose:
@@ -257,8 +267,11 @@ if __name__ == '__main__':
     logging.info("%s threads started" % (_ + 1))
 
     try:
+        logging.info("notifier selected: %s", "random" if not args.notifier[0] and len(args.notifier) == 1 else ", ".join(args.notifier))
         for notify in args.notifier:
-            for url in zone.all_archive(notifier=notify, pagenum=args.page):
+            for url in zone.all_archive(notifier=notify, pagenum=args.page,
+                                        special=1 if args.special else None,
+                                        published=0 if args.unpublished else None):
                 q.put(url)
     except Exception as e:
         run = False
