@@ -22,6 +22,42 @@ urls = []
 run = True
 
 
+# copy from https://github.com/ScryEngineering/excepthook_logging_example
+def handle_unhandled_exception(exc_type, exc_value, exc_traceback, thread_identifier=''):
+    """Handler for unhandled exceptions that will write to the logs"""
+    if issubclass(exc_type, KeyboardInterrupt):
+        # call the default excepthook saved at __excepthook__
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+
+    if not thread_identifier:
+        loging.critical("Unhandled exception", exc_info=(exc_type, exc_value, exc_traceback))
+    else:
+        logging.critical("Unhandled exception (on thread %s)", thread_identifier, exc_info=(exc_type, exc_value, exc_traceback))
+
+sys.excepthook = handle_unhandled_exception
+
+
+def patch_threading_excepthook():
+    """Installs our exception handler into the threading modules Thread object
+    Inspired by https://bugs.python.org/issue1230540
+    """
+    old_init = threading.Thread.__init__
+    def new_init(self, *args, **kwargs):
+        old_init(self, *args, **kwargs)
+        old_run = self.run
+        def run_with_our_excepthook(*args, **kwargs):
+            try:
+                old_run(*args, **kwargs)
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except:
+                sys.excepthook(*sys.exc_info(), thread_identifier=threading.get_ident())
+        self.run = run_with_our_excepthook
+    threading.Thread.__init__ = new_init
+
+patch_threading_excepthook()
+
 class CaptchaError(Exception):
     pass
 
@@ -76,12 +112,16 @@ def bypassTestCookie(jscode):
 
 
 class ZoneH(object):
-    def register(self, with_proxy=False, with_cookies=False):
+    def __init__(self):
+        self.registered = False
+
+    def register(self, with_cookies=False):
         self.sess = get_request()
+        if self.registered:
+            self.update_proxies()
         if with_cookies:
             self.sess.cookies.update(cookies)
-        if with_proxy:
-            self.update_proxies()
+
 
     def current_cookies(self, key=None):
         c = self.sess.cookies.get_dict()
@@ -89,51 +129,57 @@ class ZoneH(object):
             return {key: c[key]}
         return c
 
+    @property
+    def current_proxy(self, key=None):
+        return self.sess.proxies.get("http")
+
     def update_proxies(self):
         if not proxies.empty():
             proxy = proxies.get()
+            # logging.info("set proxy: http://%s", self.current_proxy)
             self.sess.proxies.update({
                 "http": "http://" + proxy,
                 "https": "https://" + proxy
             })
             proxies.task_done()
         else:
-            logging.error("clearing proxies")
+            if globals().get("args") and self.sess.proxies:
+                logging.error("clearing proxies")
             self.sess.proxies.clear()
 
     def make_request(self, *nargs, method="get", **kwargs):
         success = False
         tried = 0
-        self.register(False, True)
+        self.register(with_cookies=True if not self.registered else False)
         while not success:
             try:
-              with getattr(self.sess, method)(*nargs, **kwargs) as resp:
-                html_response = resp.text
-                if "src=\"/captcha.py\"" in html_response or 'name="captcha"' in html_response:
-                    raise CaptchaError(
-                        "CaptchaError: please complete Captcha in the browser. url %s" % resp.url)
-                elif "slowAES.decrypt(c,2,a,b))" in html_response and tried < 2:
-                    cookie = bypassTestCookie(html_response)
-                    self.sess.cookies.update(cookie)
-                    logging.info("current cookies: %s",
-                                 self.sess.cookies.get_dict())
-                    tried += 1
-                elif "/logout" not in html_response:
-                    raise CaptchaError(
-                        "SessionError: PHPSESSID is no longer valid")
-                else:
-                    success = True
+                with getattr(self.sess, method)(*nargs, **kwargs) as resp:
+                    html_response = resp.text
+                    if "src=\"/captcha.py\"" in html_response or 'name="captcha"' in html_response:
+                        raise CaptchaError(
+                            "CaptchaError: please complete Captcha in the browser. url %s" % resp.url)
+                    elif "slowAES.decrypt(c,2,a,b))" in html_response and tried < 2:
+                        cookie = bypassTestCookie(html_response)
+                        self.sess.cookies.update(cookie)
+                        logging.info("current cookies: %s",
+                                     self.sess.cookies.get_dict())
+                        tried += 1
+                    elif "/logout" not in html_response and self.sess.cookies.get_dict().get("ZHE"):
+                        raise CaptchaError(
+                            "SessionError: PHPSESSID is no longer valid")
+                    else:
+                        success = True
             except requests.exceptions.ProxyError:
-                logging.error("cannot connect to proxy: %s", self.sess.proxies["http"])
+                logging.info("cannot connect to proxy: %s", self.current_proxy)
                 self.update_proxies()
             except (requests.exceptions.InvalidProxyURL, requests.exceptions.InvalidURL) as e:
-                logging.error(e)
+                logging.info(e)
                 self.update_proxies()
         return resp
 
     def safe_url(self, **kwargs):
         params = "/".join("=".join((param, quote(quote(str(value), safe=""))))
-            for param, value in kwargs.items() if value is not None)
+                          for param, value in kwargs.items() if value is not None)
         return zonehome + "archive/" + params
 
     def archive(self, fatal=True, **kwargs):
@@ -171,7 +217,8 @@ class ZoneH(object):
 
 class reverse_ip:
     zone_h = ZoneH()
-    zone_h.register(True, False)
+    # zone_h.register(with_proxy=True, with_cookies=False)
+    zone_h.registered = True
 
     @classmethod
     def run_all(self, url):
@@ -213,7 +260,7 @@ class reverse_ip:
         try:
             host = socket.gethostbyname(url)
             while True:
-                with self.zone_h.make_requests("https://www.bing.com/search?q=ip:%s&page=%s" % (host, page)) as resp:
+                with self.zone_h.make_request("https://www.bing.com/search?q=ip:%s&page=%s" % (host, page)) as resp:
                     content = resp.text
                     if len(content) > 0:
                         urls.extend(re.findall(
@@ -250,10 +297,12 @@ def thread_worker(func):
             func(item)
             q.task_done()
 
+
 def add_proxy(l):
     logging.info("setting up %s proxies", len(l))
     for p in l:
         proxies.put(p)
+
 
 def sigint_handler(signum, frame):
     logging.info('shutting down')
@@ -267,7 +316,8 @@ signal.signal(signal.SIGINT, sigint_handler)
 if __name__ == '__main__':
     import argparse
 
-    logging.info("\n\n\t@author     Val\n\t@facebook   https://fb.com/zvtyrdt.id\n\n")
+    logging.info(
+        "\n\n\t@author     Val\n\t@facebook   https://fb.com/zvtyrdt.id\n\n")
 
     parser = argparse.ArgumentParser(
         formatter_class=lambda prog: argparse.HelpFormatter(
@@ -290,7 +340,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    cookies =  {"PHPSESSID": args.phpsessid}
+    cookies = {"PHPSESSID": args.phpsessid}
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
@@ -306,7 +356,8 @@ if __name__ == '__main__':
             add_proxy([args.proxy])
         elif args.proxies:
             add_proxy(open(args.proxies).read().splitlines())
-        logging.info("notifier selected: %s", "random" if not args.notifier[0] and len(args.notifier) == 1 else ", ".join(args.notifier))
+        logging.info("notifier selected: %s", "random" if not args.notifier[0] and len(
+            args.notifier) == 1 else ", ".join(args.notifier))
         for notify in args.notifier:
             for url in zone.all_archive(notifier=notify, pagenum=args.page,
                                         special=1 if args.special else None,
