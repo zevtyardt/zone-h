@@ -161,6 +161,7 @@ class ZoneH(object):
                     elif "slowAES.decrypt(c,2,a,b))" in html_response and tried < 2:
                         cookie = bypassTestCookie(html_response)
                         self.sess.cookies.update(cookie)
+                        cookies.update(cookie) #  yes
                         logging.info("current cookies: %s",
                                      self.sess.cookies.get_dict())
                         tried += 1
