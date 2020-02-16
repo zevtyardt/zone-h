@@ -7,6 +7,7 @@
   * Auto reverse IP
   * Multiple Notifier
   * Scrape all Archive
+  * Proxy support
   * Multithreading
   * Only required PHPSESSID
   * Ctrl-C handler
@@ -21,7 +22,7 @@
   * Bing:ip
 
 ## TODO
-  * Proxy support
+  * Proxy list support
 
 ---
 made with ❤ by [Val](https://facebook.com/zvtyrdt.id)
