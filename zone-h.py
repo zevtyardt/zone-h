@@ -118,13 +118,12 @@ class ZoneH(object):
             if re.search(r"(?si)total.+?<b>0</b>", response):
                 return None
             items = re.findall(
-                r"(?si)\/archive\/notifier\=(?P<notifier>[^/\"]+).*?<td>\s*(?P<url>\w+\.[\w.]+)\s*</td>", response)
+                r"(?si)<td>\s*(?P<url>[\w\d.]+)[/.]\s*", response)
             if kwargs.get("page"):
                 logging.info("page %s got %s urls", kwargs["page"], len(items))
-            for item in items:
-                notifier, url = map(html.unescape, item)
+            for url in items:
                 urls.append(url)
-                yield notifier, url
+                yield url
         except Exception as e:
             if fatal:
                 raise
@@ -138,9 +137,8 @@ class ZoneH(object):
             kwargs.update({"page": page})
             arc = list(self.archive(fatal=fatal, **kwargs))
             if not arc:
-                logging.info("no url found!")
                 break
-            for n, i in arc:
+            for i in arc:
                 yield i
             page += 1
 
