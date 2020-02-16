@@ -22,7 +22,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - FIX: scrapper does not stop when an empty url ([16874b1](https://github.com/zevtyardt/zone-h/commit/16874b1ed28a2bf2763d967752a2e83dfcc9e282)).
 
 ### Misc
+- encode special characters before making the request ([fd03517](https://github.com/zevtyardt/zone-h/commit/fd035177c9ca5e949dc44392f9d9093d57954536)).
 - first release ([90942b1](https://github.com/zevtyardt/zone-h/commit/90942b1c3547b3bc44e6f64a4c57b527be5e7dfa)).
+- update CHANGELOG.md ([719cc9d](https://github.com/zevtyardt/zone-h/commit/719cc9dafc88e318d3e95bcfeec931c6f96f178c)).
+- update domains.txt ([3969dda](https://github.com/zevtyardt/zone-h/commit/3969dda0e7f824cbfdbe7899ae5419d46daa8566)).
 - update domains.txt ([9afb646](https://github.com/zevtyardt/zone-h/commit/9afb646ee347ce873401b7d909e778ba1d3135cb)).
 - Update files ([0ca6acb](https://github.com/zevtyardt/zone-h/commit/0ca6acb0b83967fbb6f4240b4d1d30ce4ca53dfc)).
 
