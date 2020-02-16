@@ -22,3 +22,6 @@
 
 ## TODO
   * Proxy support
+
+---
+made with ❤ by [Val](https://facebook.com/zvtyrdt.id)
