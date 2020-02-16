@@ -9,6 +9,7 @@ import socket
 import random
 import sys
 from collections import OrderedDict
+from urllib.parse import quote
 
 zonehome = 'http://www.zone-h.org/'
 logging.basicConfig(format="%(threadName)s: %(message)s", level=logging.INFO)
@@ -107,11 +108,14 @@ class ZoneH(object):
                     success = True
         return resp
 
+    def safe_url(self, **kwargs):
+        params = "/".join("=".join((param, quote(quote(str(value), safe=""))))
+            for param, value in kwargs.items() if value is not None)
+        return zonehome + "archive/" + params
+
     def archive(self, fatal=True, **kwargs):
         try:
-            url = zonehome + "archive/" + \
-                '/'.join('='.join(map(str, i))
-                         for i in kwargs.items() if i[1] is not None)
+            url = self.safe_url(**kwargs)
             logging.info("scrape %r", url)
             response = self.make_request(url).text
 
