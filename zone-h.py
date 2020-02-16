@@ -7,6 +7,7 @@ import logging
 import signal
 import socket
 import random
+import os
 import sys
 from collections import OrderedDict
 from urllib.parse import quote
@@ -15,6 +16,7 @@ zonehome = 'http://www.zone-h.org/'
 logging.basicConfig(format="%(threadName)s: %(message)s", level=logging.INFO)
 thread_lokal = threading.local()
 q = queue.Queue()
+proxies = queue.Queue()
 urls = []
 
 run = True
@@ -62,11 +64,6 @@ def get_request():
                                      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_0) AppleWebKit/535.11 (KHTML, like Gecko) Chrome/17.0.963.65 Safari/535.11',
                                      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_4) AppleWebKit/535.11 (KHTML, like Gecko) Chrome/17.0.963.65 Safari/535.11'))
     })
-    if args.proxy:
-        thread_lokal.sess.proxies.update({
-            "http": "http://" + args.proxy,
-            "https": "https://" + args.proxy
-        })
     return thread_lokal.sess
 
 
@@ -82,6 +79,7 @@ class ZoneH(object):
     def register(self):
         self.sess = get_request()
         self.sess.cookies.update(cookies)
+        self.update_proxies()
 
     def current_cookies(self, key=None):
         c = self.sess.cookies.get_dict()
@@ -89,13 +87,26 @@ class ZoneH(object):
             return {key: c[key]}
         return c
 
-    def make_request(self, *args, method="get", **kwargs):
+    def update_proxies(self):
+        if not proxies.empty():
+            proxy = proxies.get()
+            self.sess.proxies.update({
+                "http": "http://" + proxy,
+                "https": "https://" + proxy
+            })
+            proxies.task_done()
+        else:
+            logging.error("clearing proxies")
+            self.sess.proxies.clear()
+
+    def make_request(self, *nargs, method="get", **kwargs):
         self.register()
         success = False
-        html_response = ""
         tried = 0
+        html_response = ""
         while not success:
-            with getattr(self.sess, method)(*args, **kwargs) as resp:
+            try:
+              with getattr(self.sess, method)(*nargs, **kwargs) as resp:
                 html_response = resp.text
                 if "src=\"/captcha.py\"" in html_response or 'name="captcha"' in html_response:
                     raise CaptchaError(
@@ -111,6 +122,12 @@ class ZoneH(object):
                         "SessionError: PHPSESSID is no longer valid")
                 else:
                     success = True
+            except requests.exceptions.ProxyError:
+                logging.error("cannot connect to proxy: %s", self.sess.proxies["http"])
+                self.update_proxies()
+            except (requests.exceptions.InvalidProxyURL, requests.exceptions.InvalidURL) as e:
+                logging.error(e)
+                self.update_proxies()
         return resp
 
     def safe_url(self, **kwargs):
@@ -123,7 +140,6 @@ class ZoneH(object):
             url = self.safe_url(**kwargs)
             logging.info("scrape %r", url)
             response = self.make_request(url).text
-
             if re.search(r"(?si)total.+?<b>0</b>", response):
                 return None
             items = re.findall(
@@ -230,6 +246,10 @@ def thread_worker(func):
             func(item)
             q.task_done()
 
+def add_proxy(l):
+    logging.info("setting up %s proxies", len(l))
+    for p in l:
+        proxies.put(p)
 
 def sigint_handler(signum, frame):
     logging.info('shutting down')
@@ -250,21 +270,23 @@ if __name__ == '__main__':
             prog, max_help_position=70)
     )
 
-    parser.add_argument("notifier", nargs="*", help="*notifier name, default random", default=[None])
-    parser.add_argument("-c", "--phpsessid", metavar="VALUE", help="valid Cookies[PHPSESSID]", required=True)
-    parser.add_argument("-s", "--special", action="store_true", help="Special defacements only")
-    parser.add_argument("-u", "--unpublished", action="store_true", help="Onhold (Unpublished) only")
+    parser.add_argument("notifier", nargs="*", help="*notifier name, default random.", default=[None])
+    parser.add_argument("-c", "--phpsessid", metavar="VALUE", help="valid Cookies[PHPSESSID].", required=True)
+    parser.add_argument("-s", "--special", action="store_true", help="Special defacements only.")
+    parser.add_argument("-u", "--unpublished", action="store_true", help="Onhold (Unpublished) only.")
     pg = parser.add_mutually_exclusive_group(required=True)
-    pg.add_argument("-p", "--page", metavar="NUM", type=int, help="Page archive, 1 - NUM")
-    pg.add_argument("-a", "--all-archive", action="store_true", help="Scrape all pages, 1 ~")
-    parser.add_argument("-t", "--threadnum", metavar="NUM", type=int, default=10, help="Thread num (default %(default)s)")
-    parser.add_argument("-x", "--proxy", metavar="IP:PORT", help="Use the specified HTTP/HTTPS/SOCKS proxy.")
-    parser.add_argument("-o", "--output", metavar="FILE", default="domains.txt", help="Output file")
-    parser.add_argument("-v", "--verbose", action="store_true", help="verbose mode")
+    pg.add_argument("-p", "--page", metavar="NUM", type=int, help="Page archive, 1 - NUM.")
+    pg.add_argument("-a", "--all-archive", action="store_true", help="Scrape all pages, 1 ~.")
+    parser.add_argument("-t", "--threadnum", metavar="NUM", type=int, default=10, help="Thread num (default %(default)s).")
+    pr = parser.add_mutually_exclusive_group(required=False)
+    pr.add_argument("-x", "--proxy", metavar="IP:PORT", help="Use the specified HTTP/HTTPS/SOCKS proxy.")
+    pr.add_argument("-X", "--proxies", metavar="FILE", help="Use the specified HTTP/HTTPS/SOCKS proxy list.")
+    parser.add_argument("-o", "--output", metavar="FILE", default="domains.txt", help="Output file.")
+    parser.add_argument("-v", "--verbose", action="store_true", help="verbose mode.")
 
     args = parser.parse_args()
 
-    cookies = {"PHPSESSID": args.phpsessid}
+    cookies =  {"PHPSESSID": args.phpsessid}
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
@@ -276,6 +298,10 @@ if __name__ == '__main__':
     logging.info("%s threads started" % (_ + 1))
 
     try:
+        if args.proxy:
+            add_proxy([args.proxy])
+        elif args.proxies:
+            add_proxy(open(args.proxies).read().splitlines())
         logging.info("notifier selected: %s", "random" if not args.notifier[0] and len(args.notifier) == 1 else ", ".join(args.notifier))
         for notify in args.notifier:
             for url in zone.all_archive(notifier=notify, pagenum=args.page,
@@ -284,7 +310,7 @@ if __name__ == '__main__':
                 q.put(url)
     except Exception as e:
         run = False
-        logging.error(e)
+        logging.critical(e)
 
     q.join()
     write_f()  # KAORI MATI
