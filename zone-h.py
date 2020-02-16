@@ -9,8 +9,8 @@ import socket
 import random
 import os
 import sys
-from collections import OrderedDict
 from urllib.parse import quote
+from collections import OrderedDict
 
 zonehome = 'http://www.zone-h.org/'
 logging.basicConfig(format="%(threadName)s: %(message)s", level=logging.INFO)
