@@ -8,6 +8,7 @@
   * Multiple Notifier
   * Scrape all Archive
   * Proxy support
+  * Proxy list support
   * Multithreading
   * Only required PHPSESSID
   * Ctrl-C handler
@@ -20,9 +21,6 @@
   * YouGetSignal (free api)
   * ViewDNS (scrape)
   * Bing:ip
-
-## TODO
-  * Proxy list support
 
 ---
 made with ❤ by [Val](https://facebook.com/zvtyrdt.id)
