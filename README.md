@@ -10,7 +10,9 @@
   * Multithreading
   * Only required PHPSESSID
   * Ctrl-C handler
-  * Kaori Mati
+  * Random Notifier `NEW`
+  * Special defacements only Archives `NEW`
+  * Onhold (Unpublished) Archives `NEW`
 
 ## ip lookup engine
   * HackerTarget (free api)
