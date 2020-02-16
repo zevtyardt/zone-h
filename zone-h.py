@@ -173,7 +173,7 @@ class ZoneH(object):
             except requests.exceptions.ProxyError:
                 logging.info("cannot connect to proxy: %s", self.current_proxy)
                 self.update_proxies()
-            except (requests.exceptions.InvalidProxyURL, requests.exceptions.InvalidURL) as e:
+            except (requests.exceptions.InvalidProxyURL, requests.exceptions.InvalidURL, requests.exceptions.SSLError) as e:
                 logging.info(e)
                 self.update_proxies()
         return resp
@@ -248,11 +248,14 @@ class reverse_ip:
     @classmethod
     def yougetsignal_lookup(self, url):
         with self.zone_h.make_request("https://domains.yougetsignal.com/domains.php", data={"remoteAddress": url, "key": "", "_": ""}) as resp:
-            js = resp.json()
-            if js['status'] != 'Success':
-                return [None, re.sub(r"<.+?>", "", js["message"])]
-            else:
-                return [[i[0] for i in js['domainArray']], None]
+            try:
+                js = resp.json()
+                if js['status'] != 'Success':
+                    return [None, re.sub(r"<.+?>", "", js["message"])]
+                else:
+                    return [[i[0] for i in js['domainArray']], None]
+            except Exception as e:
+                return [None, str(e)]
 
     @classmethod
     def bing_lookup(self, url):
