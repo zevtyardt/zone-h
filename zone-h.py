@@ -76,10 +76,12 @@ def bypassTestCookie(jscode):
 
 
 class ZoneH(object):
-    def register(self):
+    def register(self, with_proxy=False, with_cookies=False):
         self.sess = get_request()
-        self.sess.cookies.update(cookies)
-        self.update_proxies()
+        if with_cookies:
+            self.sess.cookies.update(cookies)
+        if with_proxy:
+            self.update_proxies()
 
     def current_cookies(self, key=None):
         c = self.sess.cookies.get_dict()
@@ -100,10 +102,9 @@ class ZoneH(object):
             self.sess.proxies.clear()
 
     def make_request(self, *nargs, method="get", **kwargs):
-        self.register()
         success = False
         tried = 0
-        html_response = ""
+        self.register(False, True)
         while not success:
             try:
               with getattr(self.sess, method)(*nargs, **kwargs) as resp:
@@ -169,6 +170,9 @@ class ZoneH(object):
 
 
 class reverse_ip:
+    zone_h = ZoneH()
+    zone_h.register(True, False)
+
     @classmethod
     def run_all(self, url):
         for func in dir(self):
@@ -185,7 +189,7 @@ class reverse_ip:
 
     @classmethod
     def hackertarget_lookup(self, url):
-        with get_request().get("https://api.hackertarget.com/reverseiplookup/?q=" + url) as resp:
+        with self.zone_h.make_request("https://api.hackertarget.com/reverseiplookup/?q=" + url) as resp:
             x = re.findall(r"title>(.+?)</title",
                            resp.text) or resp.text.splitlines()
             if len(x) == 1 and not re.search(r"[\w\s.]+\.\w+", x[0]):
@@ -195,7 +199,7 @@ class reverse_ip:
 
     @classmethod
     def yougetsignal_lookup(self, url):
-        with get_request().post("https://domains.yougetsignal.com/domains.php", data={"remoteAddress": url, "key": "", "_": ""}) as resp:
+        with self.zone_h.make_request("https://domains.yougetsignal.com/domains.php", data={"remoteAddress": url, "key": "", "_": ""}) as resp:
             js = resp.json()
             if js['status'] != 'Success':
                 return [None, re.sub(r"<.+?>", "", js["message"])]
@@ -209,7 +213,7 @@ class reverse_ip:
         try:
             host = socket.gethostbyname(url)
             while True:
-                with get_request().get("https://www.bing.com/search?q=ip:%s&page=%s" % (host, page)) as resp:
+                with self.zone_h.make_requests("https://www.bing.com/search?q=ip:%s&page=%s" % (host, page)) as resp:
                     content = resp.text
                     if len(content) > 0:
                         urls.extend(re.findall(
@@ -311,6 +315,5 @@ if __name__ == '__main__':
     except Exception as e:
         run = False
         logging.critical(e)
-
     q.join()
     write_f()  # KAORI MATI
