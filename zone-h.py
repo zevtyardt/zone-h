@@ -61,7 +61,6 @@ patch_threading_excepthook()
 class CaptchaError(Exception):
     pass
 
-
 def get_request():
     thread_lokal.sess = requests.Session()
     thread_lokal.sess.headers.update({
@@ -126,7 +125,7 @@ class ZoneH(object):
     def current_cookies(self, key=None):
         c = self.sess.cookies.get_dict()
         if key:
-            return {key: c[key]}
+            return {key: c.get(key))
         return c
 
     @property
@@ -165,7 +164,7 @@ class ZoneH(object):
                         logging.info("current cookies: %s",
                                      self.sess.cookies.get_dict())
                         tried += 1
-                    elif "/logout" not in html_response and self.sess.cookies.get_dict().get("ZHE"):
+                    elif "/logout" not in html_response and self.current_cookies().get("ZHE"):
                         raise CaptchaError(
                             "SessionError: PHPSESSID is no longer valid")
                     else:
@@ -272,13 +271,15 @@ class reverse_ip:
                         page += 1
                     else:
                         break
-            return [urls, "page blank!"]
+            if len(urls) == 0:
+                return [None, "page blank!"]
+            return [urls, None]
         except Exception as e:
             return [None, str(e)]
 
     @classmethod
     def viewdns_lookup(self, url):
-        with get_request().get("https://viewdns.info/reverseip/?host=%s&t=1" % url) as resp:
+        with self.zone_h.make_request("https://viewdns.info/reverseip/?host=%s&t=1" % url) as resp:
             all_dom = re.findall(r"<td>([\w\d.]+\.\w+)</td>", resp.text)
             if not all_dom:
                 return [None, "Page blank!"]
