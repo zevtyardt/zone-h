@@ -125,7 +125,7 @@ class ZoneH(object):
     def current_cookies(self, key=None):
         c = self.sess.cookies.get_dict()
         if key:
-            return {key: c.get(key))
+            return {key: c.get(key)}
         return c
 
     @property
